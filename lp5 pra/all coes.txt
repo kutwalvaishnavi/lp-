@@ -1,0 +1,1423 @@
+(HPC 1): Design and implement Parallel Breadth First Search and Depth First Search based on existing algorithms using OpenMP. Use a Tree or an undirected graph for BFS and DFS.
+
+
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <stack>
+#include <omp.h>
+
+using namespace std;
+
+const int MAX = 100;
+vector<int> graph[MAX];          // Adjacency list
+bool visited_bfs[MAX] = {false}; // Visited array for BFS
+bool visited_dfs[MAX] = {false}; // Visited array for DFS
+
+// Add an edge to the undirected graph
+void addEdge(int u, int v) {
+    graph[u].push_back(v);
+    graph[v].push_back(u);
+}
+
+// Parallel Breadth First Search (BFS)
+void parallelBFS(int start) {
+    queue<int> q;
+    q.push(start);
+    visited_bfs[start] = true;
+
+    while (!q.empty()) {
+        int size = q.size();
+
+        // Parallel processing of nodes at the current level
+        #pragma omp parallel for
+        for (int i = 0; i < size; i++) {
+            int current;
+
+            // Critical section to pop from queue safely
+            #pragma omp critical
+            {
+                if (!q.empty()) {
+                    current = q.front();
+                    q.pop();
+                    cout << "BFS visited: " << current << endl;
+                }
+            }
+
+            // Process neighbors of the current node
+            for (int neighbor : graph[current]) {
+                // Mark and enqueue unvisited neighbors
+                #pragma omp critical
+                {
+                    if (!visited_bfs[neighbor]) {
+                        visited_bfs[neighbor] = true;
+                        q.push(neighbor);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Parallel Depth First Search (DFS)
+void parallelDFS(int start) {
+    stack<int> s;
+    s.push(start);
+    visited_dfs[start] = true;
+
+    while (!s.empty()) {
+        int current;
+
+        // Critical section to pop from stack safely
+        #pragma omp critical
+        {
+            current = s.top();
+            s.pop();
+            cout << "DFS visited: " << current << endl;
+        }
+
+        // Parallel loop over neighbors
+        #pragma omp parallel for
+        for (int i = 0; i < graph[current].size(); i++) {
+            int neighbor = graph[current][i];
+            
+            #pragma omp critical
+            {
+                if (!visited_dfs[neighbor]) {
+                    visited_dfs[neighbor] = true;
+                    s.push(neighbor);
+                }
+            }
+        }
+    }
+}
+
+// Main function
+int main() {
+    // Create a sample undirected graph
+    addEdge(0, 1);
+    addEdge(0, 2);
+    addEdge(1, 3);
+    addEdge(1, 4);
+    addEdge(2, 5);
+
+    cout << "Parallel BFS starting from node 0:\n";
+    parallelBFS(0);
+
+    cout << "\nParallel DFS starting from node 0:\n";
+    parallelDFS(0);
+
+    return 0;
+}
+
+
+Compile with OpenMP:
+
+g++ -fopenmp parallel_graph.cpp -o parallel_graph
+./parallel_graph
+
+
+
+#include <iostream>
+#include <omp.h>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+using namespace std;
+
+#define SIZE 1000  // You can increase this for better performance difference
+
+// Sequential Bubble Sort
+void bubbleSortSeq(vector<int> &arr) {
+    int n = arr.size();
+    for(int i = 0; i < n - 1; i++) {
+        for(int j = 0; j < n - i - 1; j++) {
+            if(arr[j] > arr[j + 1])
+                swap(arr[j], arr[j + 1]);
+        }
+    }
+}
+
+// Parallel Bubble Sort using OpenMP
+void bubbleSortParallel(vector<int> &arr) {
+    int n = arr.size();
+    for(int i = 0; i < n; i++) {
+        #pragma omp parallel for
+        for(int j = i % 2; j < n - 1; j += 2) {
+            if(arr[j] > arr[j + 1])
+                swap(arr[j], arr[j + 1]);
+        }
+    }
+}
+
+// Merge function
+void merge(vector<int> &arr, int left, int mid, int right) {
+    vector<int> temp(right - left + 1);
+    int i = left, j = mid + 1, k = 0;
+    while(i <= mid && j <= right) {
+        if(arr[i] < arr[j])
+            temp[k++] = arr[i++];
+        else
+            temp[k++] = arr[j++];
+    }
+    while(i <= mid) temp[k++] = arr[i++];
+    while(j <= right) temp[k++] = arr[j++];
+    for(int i = 0; i < temp.size(); i++)
+        arr[left + i] = temp[i];
+}
+
+// Sequential Merge Sort
+void mergeSortSeq(vector<int> &arr, int left, int right) {
+    if(left < right) {
+        int mid = (left + right) / 2;
+        mergeSortSeq(arr, left, mid);
+        mergeSortSeq(arr, mid + 1, right);
+        merge(arr, left, mid, right);
+    }
+}
+
+// Parallel Merge Sort using OpenMP
+void mergeSortParallel(vector<int> &arr, int left, int right) {
+    if(left < right) {
+        int mid = (left + right) / 2;
+        #pragma omp parallel sections
+        {
+            #pragma omp section
+            mergeSortParallel(arr, left, mid);
+            #pragma omp section
+            mergeSortParallel(arr, mid + 1, right);
+        }
+        merge(arr, left, mid, right);
+    }
+}
+
+// Utility to generate random data
+vector<int> generateArray() {
+    vector<int> arr(SIZE);
+    for(int i = 0; i < SIZE; i++)
+        arr[i] = rand() % 10000;
+    return arr;
+}
+
+int main() {
+    srand(time(0));
+
+    vector<int> arr1 = generateArray();
+    vector<int> arr2 = arr1;
+    vector<int> arr3 = arr1;
+    vector<int> arr4 = arr1;
+
+    // Sequential Bubble Sort
+    double start = omp_get_wtime();
+    bubbleSortSeq(arr1);
+    double end = omp_get_wtime();
+    cout << "Sequential Bubble Sort Time: " << (end - start) << " sec\n";
+
+    // Parallel Bubble Sort
+    start = omp_get_wtime();
+    bubbleSortParallel(arr2);
+    end = omp_get_wtime();
+    cout << "Parallel Bubble Sort Time: " << (end - start) << " sec\n";
+
+    // Sequential Merge Sort
+    start = omp_get_wtime();
+    mergeSortSeq(arr3, 0, arr3.size() - 1);
+    end = omp_get_wtime();
+    cout << "Sequential Merge Sort Time: " << (end - start) << " sec\n";
+
+    // Parallel Merge Sort
+    start = omp_get_wtime();
+    mergeSortParallel(arr4, 0, arr4.size() - 1);
+    end = omp_get_wtime();
+    cout << "Parallel Merge Sort Time: " << (end - start) << " sec\n";
+
+    return 0;
+}
+
+
+
+
+(HPC 3): Implement Min, Max, Sum and Average operations using Parallel Reduction
+
+
+#include <iostream>
+#include <omp.h>
+#include <vector>
+#include <climits>
+#include <cstdlib>
+#include <ctime>
+
+using namespace std;
+
+#define SIZE 1000
+
+int main() {
+    srand(time(0));
+    vector<int> arr(SIZE);
+
+    // Fill the array with random integers
+    for (int i = 0; i < SIZE; i++) {
+        arr[i] = rand() % 10000;
+    }
+
+    int min_val = INT_MAX;
+    int max_val = INT_MIN;
+    long long sum = 0;
+    double average;
+
+    // Parallel Reduction for Sum, Min, Max
+    #pragma omp parallel for reduction(+:sum) reduction(min:min_val) reduction(max:max_val)
+    for (int i = 0; i < SIZE; i++) {
+        sum += arr[i];
+
+        if (arr[i] < min_val)
+            min_val = arr[i];
+
+        if (arr[i] > max_val)
+            max_val = arr[i];
+    }
+
+    average = static_cast<double>(sum) / SIZE;
+
+    cout << "Array Size: " << SIZE << endl;
+    cout << "Minimum Value: " << min_val << endl;
+    cout << "Maximum Value: " << max_val << endl;
+    cout << "Sum: " << sum << endl;
+    cout << "Average: " << average << endl;
+
+    return 0;
+}
+
+
+(HPC 4):Write a CUDA Program For: 1.Addition of Two Large Vectors
+2.Matrix Multiplication Using CUDA C
+
+1. CUDA Program: Addition of Two Large Vectors
+
+
+#include <iostream>
+#include <cuda_runtime.h>
+
+#define N 1000000
+
+__global__ void vectorAdd(float* A, float* B, float* C, int n) {
+    int i = threadIdx.x + blockDim.x * blockIdx.x;
+    if (i < n)
+        C[i] = A[i] + B[i];
+}
+
+int main() {
+    float *h_A, *h_B, *h_C;
+    float *d_A, *d_B, *d_C;
+
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    h_A = (float*)malloc(size);
+    h_B = (float*)malloc(size);
+    h_C = (float*)malloc(size);
+
+    // Initialize host arrays
+    for (int i = 0; i < N; i++) {
+        h_A[i] = i * 1.0f;
+        h_B[i] = i * 2.0f;
+    }
+
+    // Allocate device memory
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy input to device
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Display a few results
+    std::cout << "Sample results:\n";
+    for (int i = 0; i < 5; i++) {
+        std::cout << h_A[i] << " + " << h_B[i] << " = " << h_C[i] << std::endl;
+    }
+
+    // Free memory
+    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+    free(h_A); free(h_B); free(h_C);
+
+    return 0;
+}
+
+
+2. CUDA Program: Matrix Multiplication (C = A × B)
+
+
+#include <iostream>
+#include <cuda_runtime.h>
+
+#define N 16  // Matrix size (N x N)
+
+__global__ void matrixMul(float* A, float* B, float* C, int n) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    float sum = 0;
+    if (row < n && col < n) {
+        for (int i = 0; i < n; i++)
+            sum += A[row * n + i] * B[i * n + col];
+
+        C[row * n + col] = sum;
+    }
+}
+
+void fillMatrix(float* mat, int n) {
+    for (int i = 0; i < n * n; i++)
+        mat[i] = static_cast<float>(rand() % 10);
+}
+
+void printMatrix(float* mat, int n) {
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++)
+            std::cout << mat[i * n + j] << " ";
+        std::cout << std::endl;
+    }
+}
+
+int main() {
+    int size = N * N * sizeof(float);
+    float *h_A, *h_B, *h_C;
+    float *d_A, *d_B, *d_C;
+
+    h_A = (float*)malloc(size);
+    h_B = (float*)malloc(size);
+    h_C = (float*)malloc(size);
+
+    fillMatrix(h_A, N);
+    fillMatrix(h_B, N);
+
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((N + 15) / 16, (N + 15) / 16);
+    matrixMul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+
+    cudaMemcpy(h_C, d_C, size
+
+
+(HPC 5 Any One)
+1. Evaluate Performance Enhancement of Parallel Quick Sort Algorithm Using MPI.
+2. Implement Huffman Encoding on GPU.
+3. Implement Parallelization of Database Query Optimization
+4. Implement Non-Serial Polyadic Dynamic Programming With GPU Parallelization
+
+HPC 5 (Option 1): Parallel Quick Sort Using MPI
+
+Requirements:
+MPI installed (e.g., mpich or openmpi)
+
+Compile with mpic++
+
+Run with mpirun
+
+
+#include <mpi.h>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <cstdlib>
+#include <ctime>
+
+using namespace std;
+
+// Quick Sort for local sorting
+void quickSort(vector<int>& arr, int low, int high) {
+    if (low < high) {
+        int pivot = arr[high];
+        int i = low - 1;
+        for (int j = low; j < high; ++j) {
+            if (arr[j] <= pivot)
+                swap(arr[++i], arr[j]);
+        }
+        swap(arr[i + 1], arr[high]);
+        int p = i + 1;
+        quickSort(arr, low, p - 1);
+        quickSort(arr, p + 1, high);
+    }
+}
+
+int main(int argc, char** argv) {
+    MPI_Init(&argc, &argv);
+
+    int rank, size;
+    int n = 16; // Example array size
+    vector<int> full_array;
+    vector<int> sub_array;
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // Master initializes the array
+    if (rank == 0) {
+        srand(time(NULL));
+        full_array.resize(n);
+        for (int i = 0; i < n; i++)
+            full_array[i] = rand() % 100;
+
+        cout << "Unsorted Array:\n";
+        for (int val : full_array)
+            cout << val << " ";
+        cout << endl;
+    }
+
+    // Scatter array to all processes
+    int local_size = n / size;
+    sub_array.resize(local_size);
+    MPI_Scatter(full_array.data(), local_size, MPI_INT,
+                sub_array.data(), local_size, MPI_INT,
+                0, MPI_COMM_WORLD);
+
+    // Each process sorts its part
+    quickSort(sub_array, 0, local_size - 1);
+
+    // Gather sorted parts back
+    MPI_Gather(sub_array.data(), local_size, MPI_INT,
+               full_array.data(), local_size, MPI_INT,
+               0, MPI_COMM_WORLD);
+
+    // Master merges the sorted parts
+    if (rank == 0) {
+        sort(full_array.begin(), full_array.end()); // Final sort (merge sort can be used)
+        cout << "\nSorted Array:\n";
+        for (int val : full_array)
+            cout << val << " ";
+        cout << endl;
+    }
+
+    MPI_Finalize();
+    return 0;
+}
+
+
+How to Compile and Run:
+
+mpic++ mpi_quicksort.cpp -o mpi_quicksort
+mpirun -np 4 ./mpi_quicksort
+
+
+
+Option 2: Implement Huffman Encoding on GPU
+
+
+#include <iostream>
+#include <vector>
+#include <cuda_runtime.h>
+
+#define N 256  // Number of characters (ASCII)
+#define SIZE 1000000  // Example size of input
+
+// Kernel for counting the frequency of characters in parallel
+__global__ void countFrequency(char* input, int* freq, int size) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < size) {
+        atomicAdd(&freq[(unsigned char)input[idx]], 1);
+    }
+}
+
+// Function to print frequency counts
+void printFrequency(int* freq) {
+    for (int i = 0; i < N; i++) {
+        if (freq[i] > 0) {
+            std::cout << char(i) << ": " << freq[i] << std::endl;
+        }
+    }
+}
+
+int main() {
+    // Generate a sample input (using random characters for simplicity)
+    char* h_input = new char[SIZE];
+    for (int i = 0; i < SIZE; i++) {
+        h_input[i] = rand() % 256;  // Random characters between 0 and 255 (ASCII)
+    }
+
+    // Allocate memory for frequency count on the host and device
+    int* h_freq = new int[N]();  // Host frequency array
+    int* d_freq;
+    char* d_input;
+
+    cudaMalloc(&d_freq, N * sizeof(int));
+    cudaMalloc(&d_input, SIZE * sizeof(char));
+
+    cudaMemcpy(d_input, h_input, SIZE * sizeof(char), cudaMemcpyHostToDevice);
+    cudaMemset(d_freq, 0, N * sizeof(int));  // Initialize frequencies to 0 on the device
+
+    // Launch kernel to count frequencies
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (SIZE + threadsPerBlock - 1) / threadsPerBlock;
+    countFrequency<<<blocksPerGrid, threadsPerBlock>>>(d_input, d_freq, SIZE);
+
+    // Copy frequency data back to host
+    cudaMemcpy(h_freq, d_freq, N * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Print the frequency count of characters
+    printFrequency(h_freq);
+
+    // Free memory
+    delete[] h_input;
+    delete[] h_freq;
+    cudaFree(d_input);
+    cudaFree(d_freq);
+
+    return 0;
+}
+
+
+Option 3: Implement Parallelization of Database Query Optimization
+
+
+#include <iostream>
+#include <vector>
+#include <omp.h>
+
+// Simulating a database table of employees (name, department, salary)
+struct Employee {
+    std::string name;
+    std::string department;
+    int salary;
+};
+
+// Example table of employees
+std::vector<Employee> employees = {
+    {"Alice", "Sales", 50000}, {"Bob", "HR", 45000}, {"Charlie", "Sales", 60000},
+    {"David", "IT", 75000}, {"Eve", "Sales", 55000}, {"Frank", "HR", 48000},
+    {"Grace", "Sales", 65000}, {"Hannah", "IT", 70000}
+};
+
+// Parallel sum function to simulate the database query
+int parallelSumSalary(const std::string& department) {
+    int totalSalary = 0;
+
+    #pragma omp parallel for reduction(+:totalSalary)
+    for (int i = 0; i < employees.size(); i++) {
+        if (employees[i].department == department) {
+            totalSalary += employees[i].salary;
+        }
+    }
+
+    return totalSalary;
+}
+
+int main() {
+    std::string department = "Sales";
+    int totalSalesSalary = parallelSumSalary(department);
+
+    std::cout << "Total Salary of Sales Department: " << totalSalesSalary << std::endl;
+    
+    return 0;
+}
+
+
+Option 4: Implement Non-Serial Polyadic Dynamic Programming With GPU Parallelization
+
+
+#include <iostream>
+#include <vector>
+#include <cuda_runtime.h>
+
+// CUDA kernel for 3D Knapsack DP
+__global__ void knapsackKernel(int* values, int* weights, int* volumes, int* dp, int n, int W, int V) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < n) {
+        for (int w = 0; w <= W; w++) {
+            for (int v = 0; v <= V; v++) {
+                // Only consider the item if it fits in the current capacity
+                if (weights[idx] <= w && volumes[idx] <= v) {
+                    int newValue = dp[(w - weights[idx]) * (V + 1) + (v - volumes[idx])] + values[idx];
+                    int dpIndex = w * (V + 1) + v;
+                    if (dp[dpIndex] < newValue) {
+                        dp[dpIndex] = newValue;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Host function to solve the knapsack problem
+void solveKnapsack(std::vector<int>& values, std::vector<int>& weights, std::vector<int>& volumes, int W, int V) {
+    int n = values.size();
+
+    // Allocate memory for the DP table
+    int* dp;
+    cudaMallocManaged(&dp, (W + 1) * (V + 1) * sizeof(int));
+
+    // Initialize DP table to 0
+    for (int i = 0; i <= W; i++) {
+        for (int j = 0; j <= V; j++) {
+            dp[i * (V + 1) + j] = 0;
+        }
+    }
+
+    // Allocate memory for values, weights, and volumes
+    int* d_values, *d_weights, *d_volumes;
+    cudaMalloc(&d_values, n * sizeof(int));
+    cudaMalloc(&d_weights, n * sizeof(int));
+    cudaMalloc(&d_volumes, n * sizeof(int));
+
+    // Copy data to GPU
+    cudaMemcpy(d_values, values.data(), n * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_weights, weights.data(), n * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_volumes, volumes.data(), n * sizeof(int), cudaMemcpyHostToDevice);
+
+    // Launch kernel with a suitable number of threads
+    int blockSize = 256;
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    knapsackKernel<<<numBlocks, blockSize>>>(d_values, d_weights, d_volumes, dp, n, W, V);
+
+    // Synchronize and check for errors
+    cudaDeviceSynchronize();
+
+    // Retrieve the result from the DP table (maximum value in the last cell)
+    int maxValue = dp[W * (V + 1) + V];
+    std::cout << "Maximum value in Knapsack: " << maxValue << std::endl;
+
+    // Free memory
+    cudaFree(dp);
+    cudaFree(d_values);
+    cudaFree(d_weights);
+    cudaFree(d_volumes);
+}
+
+int main() {
+    // Example 3D Knapsack data (values, weights, volumes)
+    std::vector<int> values = {60, 100, 120};  // Item values
+    std::vector<int> weights = {10, 20, 30};  // Item weights
+    std::vector<int> volumes = {5, 10, 15};   // Item volumes
+
+    int W = 50;  // Max weight capacity
+    int V = 50;  // Max volume capacity
+
+    solveKnapsack(values, weights, volumes, W, V);
+
+    return 0;
+}
+
+
+
+
+(DL1): Linear regression by using Deep Neural network: Implement Boston housing price prediction problem by Linear regression using Deep Neural network. Use Boston House price prediction dataset
+
+
+import numpy as np
+import pandas as pd
+from sklearn.datasets import load_boston
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+# 1. Data Loading
+boston = load_boston()
+X = boston.data  # Independent variables
+y = boston.target  # Target variable (house prices)
+
+# 2. Data Preprocessing: Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 3. Feature Scaling: Normalize the features to improve neural network performance
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# 4. Build the Deep Neural Network model
+model = keras.Sequential()
+
+# Add input layer (input size is 13 because there are 13 features)
+model.add(layers.Dense(64, input_dim=13, activation='relu'))
+
+# Add hidden layers
+model.add(layers.Dense(64, activation='relu'))
+model.add(layers.Dense(32, activation='relu'))
+
+# Output layer (1 unit, as we're predicting a single value: house price)
+model.add(layers.Dense(1))
+
+# 5. Compile the model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# 6. Train the model
+history = model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.2, verbose=1)
+
+# 7. Evaluate the model
+y_pred = model.predict(X_test)
+mse = mean_squared_error(y_test, y_pred)
+
+print(f'Mean Squared Error on Test Data: {mse}')
+
+# Optionally, display the actual vs predicted values for a quick review
+for actual, predicted in zip(y_test[:10], y_pred[:10]):
+    print(f"Actual: {actual}, Predicted: {predicted[0]}")
+
+# 8. Predicting house prices
+new_data = np.array([[0.00632, 18.00, 2.31, 0.00, 0.538, 6.575, 65.2, 4.09, 1, 296.0, 15.3, 396.90, 4.98]])  # Example data
+new_data_scaled = scaler.transform(new_data)  # Scale the new data
+predicted_price = model.predict(new_data_scaled)
+print(f"Predicted House Price: {predicted_price[0][0]}")
+
+
+(DL 2 Any One)
+1. Classification using Deep neural network: Multiclass classification using Deep Neural Networks: Example: Use the OCR letter recognition dataset https://archive.ics.uci.edu/ml/datasets/letter+recognition
+2. Binary classification using Deep Neural Networks Example: Classify movie reviews into positive" reviews and "negative" reviews, just based on the text content of the reviews. Use IMDB dataset
+
+
+Option 1: Classification using Deep Neural Network – Multiclass Classification (OCR Letter Recognition)
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.optimizers import Adam
+import tensorflow as tf
+
+# 1. Load the OCR Letter Recognition dataset
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/letter-recognition/letter-recognition.data"
+column_names = ['letter', 'x-box', 'y-box', 'width', 'high', 'onpix', 'x-bar', 'y-bar', 'xy-bar', 'x2bar', 'y2bar', 'xy2bar', 'x-ege', 'y-ege', 'em']
+
+data = pd.read_csv(url, names=column_names)
+
+# 2. Data Preprocessing
+X = data.drop('letter', axis=1).values  # Features
+y = data['letter'].values  # Target variable
+
+# Normalize the feature data
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+# One-hot encode the target labels (letters A to Z)
+y = pd.get_dummies(y).values
+
+# 3. Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 4. Build the Deep Neural Network (DNN) model
+model = Sequential()
+
+# Input Layer
+model.add(Dense(128, input_dim=X_train.shape[1], activation='relu'))
+
+# Hidden Layers
+model.add(Dense(64, activation='relu'))
+model.add(Dense(32, activation='relu'))
+
+# Output Layer
+model.add(Dense(26, activation='softmax'))  # 26 output classes (A to Z)
+
+# 5. Compile the model
+model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+
+# 6. Train the model
+history = model.fit(X_train, y_train, epochs=20, batch_size=64, validation_split=0.2, verbose=1)
+
+# 7. Evaluate the model on test data
+loss, accuracy = model.evaluate(X_test, y_test)
+print(f'Test Accuracy: {accuracy * 100:.2f}%')
+
+# 8. Prediction on a new sample
+sample_data = X_test[0].reshape(1, -1)  # Take one sample from test data
+predicted_letter = model.predict(sample_data)
+predicted_label = chr(np.argmax(predicted_letter) + 65)  # Convert the output index to a letter (A=65, B=66, ...)
+print(f'Predicted Letter: {predicted_label}')
+
+
+Option 2: Binary Classification using Deep Neural Networks – IMDB Movie Reviews
+
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.datasets import imdb
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, Flatten, Dense
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.optimizers import Adam
+
+# 1. Load the IMDB dataset
+# Load the IMDB dataset, where the reviews are already encoded as integers.
+max_features = 10000  # We will use the top 10,000 words
+maxlen = 500  # Limit each review to the first 500 words
+
+(X_train, y_train), (X_test, y_test) = imdb.load_data(num_words=max_features)
+
+# 2. Preprocess the text data (Pad the sequences to have uniform input size)
+X_train = pad_sequences(X_train, maxlen=maxlen)
+X_test = pad_sequences(X_test, maxlen=maxlen)
+
+# 3. Build the Deep Neural Network (DNN) model
+model = Sequential()
+
+# Embedding Layer: Converts word indices into dense vectors of fixed size
+model.add(Embedding(input_dim=max_features, output_dim=128, input_length=maxlen))
+
+# Flatten the 2D output of the embedding layer
+model.add(Flatten())
+
+# Dense Layer: Fully connected layer
+model.add(Dense(128, activation='relu'))
+
+# Output Layer: Single neuron with sigmoid activation for binary classification
+model.add(Dense(1, activation='sigmoid'))
+
+# 4. Compile the model
+model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+
+# 5. Train the model
+history = model.fit(X_train, y_train, epochs=5, batch_size=64, validation_data=(X_test, y_test), verbose=1)
+
+# 6. Evaluate the model on the test data
+loss, accuracy = model.evaluate(X_test, y_test)
+print(f'Test Accuracy: {accuracy * 100:.2f}%')
+
+# 7. Prediction on a new review
+sample_review = X_test[0].reshape(1, -1)  # Take one review from the test data
+predicted_sentiment = model.predict(sample_review)
+
+# Print the predicted sentiment (0 = negative, 1 = positive)
+print(f'Predicted Sentiment: {"Positive" if predicted_sentiment[0] > 0.5 else "Negative"}')
+
+
+
+( DL 3 Any One)
+1.Convolutional neural network (CNN): Use MNIST Fashion Dataset and create a classifier to classify fashion clothing into categories.
+2.Convolutional neural network (CNN): Use any dataset of plant disease and design a plant disease detection system using CNN.
+
+
+Option 1: Convolutional Neural Network (CNN) for Fashion Clothing Classification using the MNIST Fashion Dataset
+
+import tensorflow as tf
+from tensorflow.keras.datasets import fashion_mnist
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+
+# 1. Load the Fashion MNIST dataset
+(X_train, y_train), (X_test, y_test) = fashion_mnist.load_data()
+
+# 2. Preprocess the data
+# Reshape the data to 4D format (samples, height, width, channels)
+X_train = X_train.reshape(-1, 28, 28, 1).astype('float32')
+X_test = X_test.reshape(-1, 28, 28, 1).astype('float32')
+
+# Normalize the images to the range [0, 1]
+X_train /= 255.0
+X_test /= 255.0
+
+# 3. Build the CNN model
+model = Sequential()
+
+# Convolutional Layer 1
+model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=(28, 28, 1)))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Convolutional Layer 2
+model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Flatten the output from the previous layers
+model.add(Flatten())
+
+# Fully connected layer
+model.add(Dense(128, activation='relu'))
+
+# Output layer (softmax for multi-class classification)
+model.add(Dense(10, activation='softmax'))
+
+# 4. Compile the model
+model.compile(optimizer=Adam(), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# 5. Train the model
+history = model.fit(X_train, y_train, epochs=5, batch_size=64, validation_data=(X_test, y_test), verbose=1)
+
+# 6. Evaluate the model
+loss, accuracy = model.evaluate(X_test, y_test)
+print(f'Test Accuracy: {accuracy * 100:.2f}%')
+
+# 7. Plot training and validation accuracy
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Test Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.title('Training vs Test Accuracy')
+plt.show()
+
+# 8. Prediction on a sample image
+sample_image = X_test[0].reshape(1, 28, 28, 1)
+predicted_class = model.predict(sample_image)
+
+# Display the predicted class and actual class
+print(f'Predicted Class: {predicted_class.argmax()}')
+print(f'Actual Class: {y_test[0]}')
+
+# Visualize the sample image
+plt.imshow(X_test[0].reshape(28, 28), cmap='gray')
+plt.title(f'Predicted Class: {predicted_class.argmax()}')
+plt.show()
+
+
+Option 2: Convolutional Neural Network (CNN) for Plant Disease Detection Using a Plant Disease Dataset
+
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+
+# 1. Prepare the dataset (Assuming the dataset is in a directory with subdirectories for each class)
+train_dir = 'data/train'
+val_dir = 'data/val'
+
+# 2. Image Preprocessing
+train_datagen = ImageDataGenerator(
+    rescale=1./255,  # Normalize pixel values to the range [0, 1]
+    rotation_range=40,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest')
+
+val_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(150, 150),  # Resize images
+    batch_size=32,
+    class_mode='categorical')  # Assuming multi-class classification
+
+val_generator = val_datagen.flow_from_directory(
+    val_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='categorical')
+
+# 3. Build the CNN Model
+model = Sequential()
+
+# Convolutional Layer 1
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=(150, 150, 3)))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Convolutional Layer 2
+model.add(Conv2D(64, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Convolutional Layer 3
+model.add(Conv2D(128, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Flatten the output from the convolutional layers
+model.add(Flatten())
+
+# Fully connected layers
+model.add(Dense(512, activation='relu'))
+model.add(Dropout(0.5))  # Dropout to avoid overfitting
+model.add(Dense(128, activation='relu'))
+model.add(Dense(len(train_generator.class_indices), activation='softmax'))  # Output layer for multi-class classification
+
+# 4. Compile the model
+model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+
+# 5. Train the model
+history = model.fit(
+    train_generator,
+    epochs=10,
+    validation_data=val_generator,
+    verbose=1)
+
+# 6. Evaluate the model
+loss, accuracy = model.evaluate(val_generator)
+print(f'Test Accuracy: {accuracy * 100:.2f}%')
+
+# 7. Plot training and validation accuracy
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.title('Training vs Validation Accuracy')
+plt.show()
+
+# 8. Prediction on a new plant image (example)
+from tensorflow.keras.preprocessing import image
+
+img_path = 'path_to_new_plant_image.jpg'  # Replace with the path to a new plant image
+
+# Load and preprocess the image
+img = image.load_img(img_path, target_size=(150, 150))
+img_array = image.img_to_array(img)
+img_array = img_array / 255.0  # Normalize
+img_array = tf.expand_dims(img_array, axis=0)  # Add batch dimension
+
+# Predict the class
+predictions = model.predict(img_array)
+predicted_class = predictions.argmax()  # Get the class index with the highest probability
+
+# Get the class label
+class_labels = list(train_generator.class_indices.keys())
+predicted_label = class_labels[predicted_class]
+
+print(f'Predicted disease: {predicted_label}')
+
+# Display the image
+plt.imshow(img)
+plt.title(f'Predicted Disease: {predicted_label}')
+plt.show()
+
+
+(DL 4 Any One)
+1.Project:Human Face recognition
+2.Projcet:Gender and Age Detection:Predict If a person is a male and female and also their Age.
+3.Colorizing Old B&W Images :Color Old Black & White Images To Colourful Images.
+
+Option 1: Human Face Recognition Using Deep Learning
+
+import cv2
+import numpy as np
+from keras.models import load_model
+from sklearn.preprocessing import Normalizer
+from keras.preprocessing.image import img_to_array
+from tensorflow.keras.models import load_model
+import os
+
+# Load pre-trained FaceNet model
+model_path = 'facenet_keras.h5'  # Path to the pre-trained FaceNet model
+facenet_model = load_model(model_path)
+
+# Load face detection model (Haar Cascade or MTCNN)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Load the known face images and their names
+def load_images_from_folder(folder):
+    images = []
+    labels = []
+    for filename in os.listdir(folder):
+        img_path = os.path.join(folder, filename)
+        img = cv2.imread(img_path)
+        if img is not None:
+            images.append(img)
+            labels.append(filename.split('.')[0])  # Assume filename is name.jpg
+    return images, labels
+
+# Function to get face embeddings using FaceNet model
+def get_embedding(model, face_pixels):
+    face_pixels = face_pixels.astype('float32')
+    # Normalize pixel values to be between -1 and 1
+    mean, std = face_pixels.mean(), face_pixels.std()
+    face_pixels = (face_pixels - mean) / std
+    # Convert the image to a 1D array
+    face_pixels = np.expand_dims(face_pixels, axis=0)
+    embedding = model.predict(face_pixels)
+    return embedding
+
+# Function to recognize face
+def recognize_face(face_embedding, known_embeddings, known_labels):
+    distances = []
+    for i, embedding in enumerate(known_embeddings):
+        dist = np.linalg.norm(face_embedding - embedding)
+        distances.append(dist)
+    min_distance_index = np.argmin(distances)
+    return known_labels[min_distance_index]
+
+# Preprocess the image and extract face
+def preprocess_image(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    
+    if len(faces) == 0:
+        return None
+    
+    # Extract the first face detected (assuming a single face in the image)
+    (x, y, w, h) = faces[0]
+    face = image[y:y + h, x:x + w]
+    
+    # Resize the face to (160, 160) as expected by FaceNet
+    face = cv2.resize(face, (160, 160))
+    face = img_to_array(face)
+    return face
+
+# Main function for recognition
+def main(image_path, known_faces_folder):
+    # Load known faces
+    known_images, known_labels = load_images_from_folder(known_faces_folder)
+    known_embeddings = []
+    
+    # Extract embeddings for known faces
+    for img in known_images:
+        face = preprocess_image(img)
+        if face is not None:
+            embedding = get_embedding(facenet_model, face)
+            known_embeddings.append(embedding)
+    
+    # Normalize embeddings
+    normalizer = Normalizer(norm='l2')
+    known_embeddings = normalizer.transform(known_embeddings)
+
+    # Load test image and preprocess
+    test_image = cv2.imread(image_path)
+    test_face = preprocess_image(test_image)
+    
+    if test_face is not None:
+        test_embedding = get_embedding(facenet_model, test_face)
+        test_embedding = normalizer.transform(test_embedding)
+        
+        # Recognize the face
+        name = recognize_face(test_embedding, known_embeddings, known_labels)
+        print(f"Recognized face: {name}")
+    else:
+        print("No face detected in the image")
+
+# Example usage
+image_path = 'test_face.jpg'  # Path to the test image
+known_faces_folder = 'known_faces/'  # Folder containing known face images
+
+main(image_path, known_faces_folder)
+
+
+Option 2: Gender and Age Detection using Deep Learning
+
+
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
+
+# Load and preprocess the dataset (replace with actual dataset loading)
+# Assume images are stored in 'data/images' with labels for gender and age
+# Split dataset into training and validation sets
+
+# 1. Image Preprocessing
+image_size = (150, 150)
+
+train_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_directory(
+    'data/train',
+    target_size=image_size,
+    batch_size=32,
+    class_mode='categorical',  # for gender classification
+    subset='training')
+
+val_generator = train_datagen.flow_from_directory(
+    'data/val',
+    target_size=image_size,
+    batch_size=32,
+    class_mode='categorical')
+
+# 2. Build the CNN Model
+model = Sequential()
+
+# Convolutional Layers
+model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(150, 150, 3)))
+model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+
+model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+
+model.add(layers.Conv2D(128, (3, 3), activation='relu'))
+model.add(layers.MaxPooling2D(pool_size=(2, 2)))
+
+# Flatten the output of convolutional layers
+model.add(layers.Flatten())
+
+# Dense layers
+model.add(layers.Dense(512, activation='relu'))
+model.add(layers.Dropout(0.5))
+
+# Gender Prediction (binary classification)
+model.add(layers.Dense(2, activation='softmax', name='gender_output'))
+
+# Age Prediction (regression or multi-class classification)
+model.add(layers.Dense(1, activation='linear', name='age_output'))  # Use 'softmax' for multi-class
+
+# 3. Compile the model
+model.compile(optimizer=Adam(),
+              loss={'gender_output': 'categorical_crossentropy', 'age_output': 'mse'},
+              metrics={'gender_output': 'accuracy', 'age_output': 'mae'})
+
+# 4. Train the model
+history = model.fit(
+    train_generator,
+    epochs=10,
+    validation_data=val_generator
+)
+
+# 5. Evaluate the model
+gender_loss, gender_accuracy, age_loss, age_mae = model.evaluate(val_generator)
+print(f"Gender Accuracy: {gender_accuracy * 100:.2f}%")
+print(f"Age MAE (Mean Absolute Error): {age_mae:.2f}")
+
+# 6. Plot training and validation accuracy and loss
+plt.figure(figsize=(12, 6))
+
+# Accuracy plot for gender prediction
+plt.subplot(1, 2, 1)
+plt.plot(history.history['gender_output_accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_gender_output_accuracy'], label='Val Accuracy')
+plt.title('Gender Prediction Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+# Loss plot for age prediction
+plt.subplot(1, 2, 2)
+plt.plot(history.history['age_output_loss'], label='Train Loss')
+plt.plot(history.history['val_age_output_loss'], label='Val Loss')
+plt.title('Age Prediction Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.show()
+
+# 7. Predict on new image
+from tensorflow.keras.preprocessing import image
+
+img_path = 'path_to_new_image.jpg'  # Replace with the path to a new image
+
+# Load and preprocess the image
+img = image.load_img(img_path, target_size=(150, 150))
+img_array = image.img_to_array(img)
+img_array = img_array / 255.0  # Normalize
+img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+
+# Predict the gender and age
+gender_pred, age_pred = model.predict(img_array)
+gender_pred_class = np.argmax(gender_pred, axis=1)
+predicted_gender = 'Male' if gender_pred_class == 0 else 'Female'
+predicted_age = age_pred[0]
+
+print(f"Predicted Gender: {predicted_gender}")
+print(f"Predicted Age: {predicted_age}")
+
+
+
+Option 3: Colorizing Old Black & White Images Using Deep Learning
+
+pip install tensorflow opencv-python matplotlib
+
+import tensorflow as tf
+from tensorflow.keras import layers, models
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load and preprocess image
+def load_and_preprocess_image(image_path):
+    # Load image in grayscale
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    # Resize image to a fixed size (e.g., 256x256)
+    img = cv2.resize(img, (256, 256))
+    # Normalize image to be between 0 and 1
+    img = img.astype('float32') / 255.0
+    return img
+
+# Colorization model architecture using U-Net (simple CNN)
+def create_colorization_model(input_shape):
+    model = models.Sequential()
+    # Encoder: Downsample with convolution layers
+    model.add(layers.InputLayer(input_shape=input_shape))
+    model.add(layers.Conv2D(64, (3, 3), activation='relu', padding='same'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(128, (3, 3), activation='relu', padding='same'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Conv2D(256, (3, 3), activation='relu', padding='same'))
+    model.add(layers.MaxPooling2D((2, 2)))
+    
+    # Decoder: Upsample with convolution layers
+    model.add(layers.Conv2DTranspose(128, (3, 3), activation='relu', padding='same'))
+    model.add(layers.UpSampling2D((2, 2)))
+    
+    model.add(layers.Conv2DTranspose(64, (3, 3), activation='relu', padding='same'))
+    model.add(layers.UpSampling2D((2, 2)))
+    
+    model.add(layers.Conv2D(3, (3, 3), activation='sigmoid', padding='same'))  # Output layer with 3 channels (RGB)
+    
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    return model
+
+# Train the model (you will need a dataset of grayscale and color images for this part)
+def train_colorization_model(model, train_images, train_labels, epochs=10):
+    model.fit(train_images, train_labels, epochs=epochs, batch_size=32)
+
+# Predict and colorize a black-and-white image
+def colorize_image(model, gray_image):
+    # Add an extra dimension to match the input shape (batch_size, height, width, channels)
+    gray_image = np.expand_dims(gray_image, axis=-1)
+    gray_image = np.expand_dims(gray_image, axis=0)  # Shape (1, 256, 256, 1)
+    
+    # Predict the colorized image
+    colorized_image = model.predict(gray_image)
+    return colorized_image[0]
+
+# Visualize the original and colorized image
+def visualize_results(gray_image, colorized_image):
+    plt.figure(figsize=(10,5))
+    plt.subplot(1, 2, 1)
+    plt.title('Original B&W Image')
+    plt.imshow(gray_image, cmap='gray')
+    
+    plt.subplot(1, 2, 2)
+    plt.title('Colorized Image')
+    plt.imshow(colorized_image)
+    
+    plt.show()
+
+# Main function to colorize an image
+def main(image_path):
+    # Load and preprocess the image
+    gray_image = load_and_preprocess_image(image_path)
+    
+    # Create a simple colorization model
+    model = create_colorization_model(input_shape=(256, 256, 1))  # Input shape for grayscale image
+    
+    # Normally, you would train the model here, but for simplicity, we assume the model is already trained.
+    # Assuming you have a trained model, you can skip training and load a pre-trained model.
+    # model = tf.keras.models.load_model('colorization_model.h5')
+    
+    # Colorize the black and white image
+    colorized_image = colorize_image(model, gray_image)
+    
+    # Visualize the result
+    visualize_results(gray_image, colorized_image)
+
+# Example usage
+image_path = 'bw_image.jpg'  # Path to the black-and-white image
+main(image_path)
+
+
+
+
